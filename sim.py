@@ -9,9 +9,9 @@ REPAIR_MEAN = 450.0 * 60        # Avg. repair time in seconds
 REPAIR_SIGMA = 4000.0            # Sigma of processing time
 MTTF = 30.0 * 60 * 60          # Mean time to failure in seconds
 BREAK_MEAN = 1 / MTTF          # Param. for expovariate distribution
-WEEKS = 120                 			# Default simulation time in weeks
+WEEKS = 120                             # Default simulation time in weeks
 SIM_TIME = WEEKS * 7 * 24 * 60 * 60     # Simulation time in seconds
-OUTPUT = "./output.log"					# Default output log file
+OUTPUT = "./output.log"                    # Default output log file
 
 joblist = {}
 replicalist = {}
@@ -75,7 +75,7 @@ class Replica(object):
                             self.failure = False
                     #         alive += 1
                     # if (alive < threshold):
-                    # 	outfile.write("%s,%s,%s,DOWNGRADE" % (env.now, self.jid,self.rid))
+                    #     outfile.write("%s,%s,%s,DOWNGRADE" % (env.now, self.jid,self.rid))
                     if (self.failure == True):
                         print('Replica %d stops running at %d' % (self.rid, env.now))
                         outfile.write("%s,%s,%s,STOP" % (env.now, self.jid,self.rid))
@@ -226,7 +226,7 @@ def findAvailCluster(replica):
         return avail[index]
 
 def failureHandler(env, failurelog):
-	ffile = open(failurelog, "r")
+    ffile = open(failurelog, "r")
     for line in ffile:
         line = line.strip('\n')
         line = line.strip('\r')
@@ -238,42 +238,42 @@ def failureHandler(env, failurelog):
         ftype = parts[2]
         yield env.timeout(ftime)
         if ftype == "MT":
-        	zid = parts[4]
-        	for c in clusterlist.values():
-        		if(c.zid == zid):
-        			c.action.interrupt('FS')
+            zid = parts[4]
+            for c in clusterlist.values():
+                if(c.zid == zid):
+                    c.action.interrupt('FS')
             yield env.timeout(duration)
-	        for c in clusterlist.values():
-	            if(c.zid == zid):
-	                c.action.interrupt('FE')
-	    elif ftype == "SNF":
-	    	nid = parts[4]
-			nodelist[nid].action.interrupt('FS')
-			yield env.timeout(duration) 
-			nodelist[nid].action.interrupt('FE')
-		elif ftype == "MNF":
-			targetType = parts[3]
-			if targetType == "Cluster":
-				cid = parts[4]
-				clusterlist[cid].action.interrupt('FS')
-				yield env.timeout(duration)
-				clusterlist[cid].action.interrupt('FE')
-			elif targetType == "Physical":
-				pid = parts[4]
-	        	for c in clusterlist.values():
-	        		if(c.pid == pid):
-	        			c.action.interrupt('FS')
-	            yield env.timeout(duration)
-		        for c in clusterlist.values():
-		            if(c.pid == pid):
-		                c.action.interrupt('FE')
-		    elif targetType == "MultiNodeOutage":
-		    	nodes = parts[4].split(",")
-		    	for nid in nodes:
-		    		nodelist[nid].action.interrupt("FS")
-		    	yield env.timeout(duration)
-		    	for nid in nodes:
-		    		nodelist[nid].action.interrupt("FE")
+            for c in clusterlist.values():
+                if(c.zid == zid):
+                    c.action.interrupt('FE')
+        elif ftype == "SNF":
+            nid = parts[4]
+            nodelist[nid].action.interrupt('FS')
+            yield env.timeout(duration) 
+            nodelist[nid].action.interrupt('FE')
+        elif ftype == "MNF":
+            targetType = parts[3]
+            if targetType == "Cluster":
+                cid = parts[4]
+                clusterlist[cid].action.interrupt('FS')
+                yield env.timeout(duration)
+                clusterlist[cid].action.interrupt('FE')
+            elif targetType == "Physical":
+                pid = parts[4]
+                for c in clusterlist.values():
+                    if(c.pid == pid):
+                        c.action.interrupt('FS')
+                yield env.timeout(duration)
+                for c in clusterlist.values():
+                    if(c.pid == pid):
+                        c.action.interrupt('FE')
+            elif targetType == "MultiNodeOutage":
+                nodes = parts[4].split(",")
+                for nid in nodes:
+                    nodelist[nid].action.interrupt("FS")
+                yield env.timeout(duration)
+                for nid in nodes:
+                    nodelist[nid].action.interrupt("FE")
     ffile.close()
 
 def createResource(env, joblog, clusterlog):
@@ -296,9 +296,9 @@ def createResource(env, joblog, clusterlog):
         zid = parts[2]
         nodes = parts[3].split(",")
         for nid in nodes:
-        	aNode = Node(env, nid, cid, -1)
-        	nodelist[nid] = aNode
-        	temp1.append(aNode)
+            aNode = Node(env, nid, cid, -1)
+            nodelist[nid] = aNode
+            temp1.append(aNode)
         clusterlist[cid] = Cluster(env, cid, pid, zid, temp1, len(nodes))
         del temp1[:]
     cfile.close()
@@ -316,34 +316,34 @@ def createResource(env, joblog, clusterlog):
         jid = parts[1]
         replicas = parts[2].split(",")
         numTasks = parts[3].split(",")
-        placement = parts[4].split(",")
-        requirement = parts[5].split(",")
+        # placement = parts[4].split(",")
+        # requirement = parts[5].split(",")
         for rid in replicas:
-        	for t in range(int(numTasks[i])):
-        		aTask = Task(env, tid, rid, -1)
-        		tasklist[tid] = aTask
-        		tid += 1        		
-        		temp1.append(aTask)
-    		i += 1
-        	aReplica = Replica(env, rid, jid, -1, temp1)
-        	del temp1[:]
-        	replicalist[rid] = aReplica
-        	temp2.append(aReplica)
+            for t in range(int(numTasks[i])):
+                aTask = Task(env, tid, rid, -1)
+                tasklist[tid] = aTask
+                tid += 1
+                temp1.append(aTask)
+            i += 1
+            aReplica = Replica(env, rid, jid, -1, temp1)
+            del temp1[:]
+            replicalist[rid] = aReplica
+            temp2.append(aReplica)
         aJob = Job(env, jid, temp2)
         joblist[jid] = aJob
         del temp2[:]
 
-	    #map job to nodes
-	    if not placement:
-	        for r in range(len(job.replicalist)):
-	            cid = findAvailCluster(job.replicalist[r])
-	            if (cid != -1):
-	                print 'add replica %d (Job %d) to cluster %d' %(job.replicalist[r].rid, job.jid, cid)
-	                assignReplica(clusterlist[cid], job.replicalist[r])
-		else:
-			for r in range(len(job.replicalist)):
-				assignReplica(clusterlist[placement[r]], job.replicalist[r])
-	jfile.close()
+        #map job to nodes
+        # if not placement:
+        for r in range(len(job.replicalist)):
+            cid = findAvailCluster(job.replicalist[r])
+            if (cid != -1):
+                print 'add replica %d (Job %d) to cluster %d' %(job.replicalist[r].rid, job.jid, cid)
+                assignReplica(clusterlist[cid], job.replicalist[r])
+        # else:
+            # for r in range(len(job.replicalist)):
+                # assignReplica(clusterlist[placement[r]], job.replicalist[r])
+    jfile.close()
 
 
 if __name__ == "__main__":
@@ -376,10 +376,10 @@ if __name__ == "__main__":
         exit()
 
     if opts.outputlog:
-    	OUTPUT = opts.outputlog
+        OUTPUT = opts.outputlog
 
     if opts.simtime:
-    	SIM_TIME = opts.simtime * 7 * 24 * 60 * 60
+        SIM_TIME = opts.simtime * 7 * 24 * 60 * 60
 
     random.seed(RANDOM_SEED)
 
