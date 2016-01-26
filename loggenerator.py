@@ -127,15 +127,49 @@ def generateJob(configs, total_nodes, outfile):
     joblog.close()        
 
 def generateFailure(configs, outfile):
+    
     failurelog = open(outfile, "w")
+    
+    clusters = int(configs["NUM_CLUSTER"])
+    metros = int(configs["NUM_METRO"])
+    lzs = int(configs["NUM_LZ"])
+    nodes = int(configs["NUM_NODE"])
+
     sim_time = int(configs["SIM_TIME_IN_DAYS"]) * 24 * 60 * 60
-    mttf = float(configs["MTTF"]) * 60 
+    lambda_range = configs["LAMBDA_RANGE_PER_HOUR"].split(",")
+    lambda_min = float(lambda_range[0]) * 60 * 60
+    lambda_max = float(lambda_range[1]) * 60 * 60
     repair_mean = float(configs["REPAIR_MEAN"])
     repair_sigma = float(configs["REPAIR_SIGMA"])
     mt_interval = float(configs["MT_INTERVAL_IN_DAYS"]) * 24 * 60 * 60
     mt_duration = float(configs["MT_DURATION_IN_DAYS"]) * 24 * 60 * 60
 
+    failures = {}
 
+    # generate maintainance schedule
+    for zid in range(lzs):
+        t = zid * mt_duration
+        while (t < sim_time): 
+            time = t + mt_interval
+            failures["time"] = time
+            failures[""]
+
+
+            t= time
+
+
+    # generate node failures
+    for nid in range(nodes):
+        lambd = random.uniform(lambda_min, lambda_max)
+        t = 0
+        while(t < sim_time):
+            time = t + random.expovariate(lambd)
+            failures["time"] = 
+
+            t = time 
+
+    # sort by time
+    
 
     failurelog.close()
 
