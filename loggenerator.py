@@ -28,10 +28,10 @@ def parseConfig(filename):
 def generateCluster(configs, outfile):
     clusterlog = open(outfile, "w")
 
-    clusters = int(configs["NUM_CLUSTER"])
+    clusters = int(configs["NUM_CLUSTER_PER_METRO"])
     metros = int(configs["NUM_METRO"])
     lzs = int(configs["NUM_LZ"])
-    nodes = int(configs["NUM_NODE"])
+    nodes = int(configs["NUM_NODE_PER_CLUSTER"])
 
     total_nodes = clusters * nodes * metros
 
@@ -130,10 +130,10 @@ def generateFailure(configs, outfile):
     
     failurelog = open(outfile, "w")
     
-    clusters = int(configs["NUM_CLUSTER"])
+    clusters = int(configs["NUM_CLUSTER_PER_METRO"])
     metros = int(configs["NUM_METRO"])
     lzs = int(configs["NUM_LZ"])
-    nodes = int(configs["NUM_NODE"])
+    nodes = int(configs["NUM_NODE_PER_CLUSTER"])
 
     sim_time = int(configs["SIM_TIME_IN_DAYS"]) * 24 * 60 * 60
     lambda_range = configs["LAMBDA_RANGE_PER_HOUR"].split(",")
@@ -144,33 +144,58 @@ def generateFailure(configs, outfile):
     mt_interval = float(configs["MT_INTERVAL_IN_DAYS"]) * 24 * 60 * 60
     mt_duration = float(configs["MT_DURATION_IN_DAYS"]) * 24 * 60 * 60
 
+    maintain = {}
     failures = {}
 
     # generate maintainance schedule
+    mid = 0
     for zid in range(lzs):
         t = zid * mt_duration
         while (t < sim_time): 
             time = t + mt_interval
-            failures["time"] = time
-            failures[""]
-
-
-            t= time
-
+            maintain[mid]={}
+            maintain[mid]["time"] = time
+            maintain[mid]["duration"] = mt_duration
+            maintain[mid]["type"] = "MT"
+            maintain[mid]["target_type"] = "LZ"
+            maintain[mid]["target"] = zid
+            t = time
+            mid += 1
 
     # generate node failures
+    fid = 0
     for nid in range(nodes):
         lambd = random.uniform(lambda_min, lambda_max)
         t = 0
         while(t < sim_time):
             time = t + random.expovariate(lambd)
-            failures["time"] = 
-
-            t = time 
+            failures[fid]={}
+            failures[fid]["time"] = time
+            k=random.normalvariate(repair_mean, repair_sigma)
+            while (k<=0):
+                k=random.normalvariate(repair_mean, repair_sigma)
+            failures[fid]["duration"] = k
+            failures[fid]["type"] = "SNF"
+            failures[fid]["target_type"] = "SN"
+            failures[fid]["target"] = nid
+            t = time + k
+            fid += 1
 
     # sort by time
-    
-
+    i = 0
+    j = 0
+    line=""
+    while (i < len(maintain)):
+        while (j < len(failures)):
+            if (maintain[i]["time"]<= failures[j]["time"]):
+                line += "%s;%s;%s;%s;%s\n" % (maintain[i]["time"], maintain[i]["duration"], 
+                    maintain[i]["type"], maintain[i]["target_type"], maintain[i]["target"])
+                i += 1
+            else:
+                line += "%s;%s;%s;%s;%s\n" % (failures[j]["time"], failures[j]["duration"], 
+                    failures[j]["type"], failures[j]["target_type"], failures[j]["target"])
+                j += 1
+    failurelog.write(line)
     failurelog.close()
 
 if __name__ == "__main__":

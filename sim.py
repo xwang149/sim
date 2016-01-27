@@ -358,6 +358,8 @@ if __name__ == "__main__":
                     help = "path of failure log file") 
     p.add_option("-o", "--outputlog", dest = "outputlog", type = "string", 
                     help = "path of output log file")    
+    p.add_option("-s", "--strategy", dest = "strategy", type = "string", 
+                help = "job placement strategy") 
     (opts, args) = p.parse_args()
     
     if not opts.joblog:
@@ -372,6 +374,11 @@ if __name__ == "__main__":
 
     if not opts.failurelog:
         print "please specify path of failure log file (-f)"
+        p.print_help()
+        exit()
+
+    if not opts.strategy:
+        print "please specify strategy of job placement (-s)"
         p.print_help()
         exit()
 
