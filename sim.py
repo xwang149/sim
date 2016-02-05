@@ -10,9 +10,10 @@ REPAIR_SIGMA = 4000.0          # Sigma of processing time
 max_pid = 0
 max_zid = 0
 
-DAYS = 400                             # Default simulation time in weeks
+DAYS = 365                             # Default simulation time in weeks
 SIM_TIME = DAYS * 24 * 60 * 60         # Simulation time in seconds
 OUTPUT = "./output.log"                # Default output log file
+logger = ""
 
 joblist = {}
 replicalist = {}
@@ -21,37 +22,36 @@ nodelist = {}
 clusterlist = {}
 
 class Job(object):
-    def __init__(self, env, jid, replicalist):
+    def __init__(self, env, jid, replicalist, requirement):
         self.env = env
         self.jid = jid
         self.replicalist = list(replicalist)
         self.failure = False
+        self.requirement=requirement
+        self.running = False
         self.action = env.process(self.run())
 
     def run(self):
-        print("%s,Job %s,START" % (env.now, self.jid))
-        # outfile = open(OUTPUT, "a")
+        global logger
+        if(self.running == True):
+            print("%s,Job %s,START" % (env.now, self.jid))
+            # logger += "%s,Job %s,START\n" % (env.now, self.jid)
         while True:
             try:
                 yield self.env.timeout(SIM_TIME)
             except simpy.Interrupt as i:
-                if (i.cause == 'RD'):
+                if (i.cause == 'RD' and self.failure==False):
                     self.failure = True
                     for replica in self.replicalist:
                         if(replica.failure == False):
                             self.failure = False
                     if (self.failure == True):
-                        # print('Job %s stops running at %d' % (self.jid, env.now))
                         print("%s,Job %s,STOP" % (env.now, self.jid))
-                        # outfile.write("%s,%s,STOP" % (env.now, self.jid))
-                        # outfile.close()
-                if (i.cause == 'RU'):
-                    if(self.failure == True):
-                        self.failure = False
-                        # print('Job %s restarts running at %d' % (self.jid, env.now))
-                        print("%s,Job %s,RESTART" % (env.now, self.jid))
-                        # outfile.write("%s,%s,RESTART" % (env.now, self.jid))
-                        # outfile.close()
+                        # logger += "%s,Job %s,STOP\n" % (env.now, self.jid)
+                if (i.cause == 'RU' and self.failure==True):
+                    self.failure = False
+                    print("%s,Job %s,RESTART" % (env.now, self.jid))
+                    # logger += "%s,Job %s,RESTART\n" % (env.now, self.jid)
 
 class Replica(object):
     def __init__(self, env, rid, jid, cid, tasklist):
@@ -67,41 +67,40 @@ class Replica(object):
         # print('Replica %s starts running at %d' % (self.rid, env.now))
         # alive = 0
         # threshold = math.ceil(len(self.tasklist)/2.0)
-        # outfile = open(OUTPUT, "a")
+        global logger
         while True:
             try:
                 yield self.env.timeout(SIM_TIME)
             except simpy.Interrupt as i:
-                if (i.cause == 'TD'):
+                if (i.cause == 'TD' and self.failure==False):
                     self.failure = True
                     for task in self.tasklist:
                         if(task.failure == False):
                             self.failure = False
                     #         alive += 1
                     # if (alive < threshold):
-                    #     outfile.write("%s,%s,%s,DOWNGRADE" % (env.now, self.jid,self.rid))
                     if (self.failure == True):
-                        # print("%s,Replica %s (Job %s),STOP" % (env.now, self.rid, self.jid))
-                        # outfile.write("%s,%s,%s,STOP" % (env.now, self.jid,self.rid))
+                        print("%s,Replica %s (Job %s),STOP" % (env.now, self.rid, self.jid))
+                        # logger += "%s,Replica %s (Job %s),STOP\n" % (env.now, self.rid, self.jid)
                         joblist[self.jid].action.interrupt('RD')
-                if (i.cause == 'TU'):
-                    if(self.failure == True):
-                        self.failure = False
-                        # print("%s,Replica %s (Job %s),RESTART" % (env.now, self.rid, self.jid))
-                        # outfile.write("%s,%s,%s,RESTART" % (env.now, self.jid,self.rid))
-                        joblist[self.jid].action.interrupt('RU')            
+                if (i.cause == 'TU' and self.failure==True):
+                    self.failure = False
+                    print("%s,Replica %s (Job %s),RESTART" % (env.now, self.rid, self.jid))
+                    # logger += "%s,Replica %s (Job %s),RESTART\n" % (env.now, self.rid, self.jid)
+                    joblist[self.jid].action.interrupt('RU')            
 
 class Task(object):
-    def __init__(self, env, tid, rid, nid):
+    def __init__(self, env, tid, rid, jid, nid):
         self.env = env
         self.tid = tid
         self.rid = rid
+        self.jid = jid
         self.nid = nid
         self.failure = False
         self.action = env.process(self.run())
 
     def run(self):
-        # print('Task %s starts running at %d' % (self.tid, env.now))
+        global logger
         while True:           
             try:
                 yield self.env.timeout(SIM_TIME)
@@ -109,11 +108,13 @@ class Task(object):
             except simpy.Interrupt as i:
                 if (i.cause == 'FS' and self.failure==False):
                     self.failure = True
-                    # print('Task %s stops running at %d' % (self.tid, env.now))
+                    print("%s,Task %s_%s,STOP" % (env.now, self.jid, self.tid))
+                    # logger += "%s,Task %s_%s,STOP\n" % (env.now, self.jid, self.tid)
                     replicalist[self.rid].action.interrupt('TD')
                 if (i.cause == 'FE' and self.failure==True):
                     self.failure = False
-                    # print('Task %s restarts running at %d' % (self.tid, env.now))
+                    print("%s,Task %s_%s,RESTART" % (env.now, self.jid, self.tid))
+                    # logger += "%s,Task %s_%s,RESTART\n" % (env.now, self.jid, self.tid)
                     replicalist[self.rid].action.interrupt('TU')
 
 class Node(object):
@@ -124,8 +125,9 @@ class Node(object):
         self.cid = cid
         self.tid = tid
         self.down = False
-        # self.lambd = random.uniform(lambda_min, lambda_max)
+        self.maintain = False
         self.action = env.process(self.working())
+        # self.lambd = random.uniform(lambda_min, lambda_max)
         # env.process(self.node_down())
 
     def working(self):
@@ -141,17 +143,28 @@ class Node(object):
             try:
                 yield self.env.timeout(SIM_TIME)
             except simpy.Interrupt as i:
-                if (i.cause == 'FS' and self.down==False):
+                if (i.cause == 'FS' and self.maintain==False and self.down==False):
                     self.down = True
                     # print("%s,Node %s,STOP" % (env.now, self.nid))
                     if(self.tid!=-1):
                         tasklist[self.tid].action.interrupt('FS')
-                if (i.cause == 'FE' and self.down == True):
+                if (i.cause == 'FE' and self.maintain==False and self.down == True):
                     if(self.tid!=-1):
                         tasklist[self.tid].action.interrupt('FE')
                     self.down = False
                     # print("%s,Node %s,RESTART" % (env.now, self.nid))
-
+                if (i.cause == 'MTS' and self.maintain==False):
+                    self.down = True
+                    self.maintain = True
+                    # print("%s,Node %s,MTSTART" % (env.now, self.nid))
+                    if(self.tid!=-1):
+                        tasklist[self.tid].action.interrupt('FS')
+                if (i.cause == 'MTE' and self.maintain == True):
+                    if(self.tid!=-1):
+                        tasklist[self.tid].action.interrupt('FE')
+                    self.down = False
+                    self.maintain=False
+                    # print("%s,Node %s,MTEND" % (env.now, self.nid))
     # def node_down(self):
     #     """Break the machine every now and then."""
     #     while True:
@@ -172,28 +185,41 @@ class Cluster(object):
         self.avail = capacity
         self.nodelist = list(nodelist)
         self.down = False
+        self.maintain = False
         self.action = env.process(self.working())
 
     def working(self):
-        # print('Cluster %s starts running at %d' % (self.cid, env.now))        
+        global logger     
         while True:           
-
             try:
                 yield self.env.timeout(SIM_TIME)
-
             except simpy.Interrupt as i:
-                if (i.cause == 'FS'):
+                if (i.cause == 'FS' and self.maintain==False and self.down==False):
                     self.down = True
                     print("%s,Cluster %s,STOP" % (env.now, self.cid))
+                    # logger += "%s,Cluster %s,STOP\n" % (env.now, self.cid)
                     for node in self.nodelist:
-                        node.maintain = True
                         node.action.interrupt('FS')
-                if (i.cause == 'FE'):
+                if (i.cause == 'FE' and self.maintain==False and self.down==True):
                     for node in self.nodelist:
-                        node.maintain = False
                         node.action.interrupt('FE')
                     self.down = False
-                    print("%s,Cluster %s,RESTART" % (env.now, self.cid))        
+                    print("%s,Cluster %s,RESTART" % (env.now, self.cid))
+                    # logger +=  "%s,Cluster %s,RESTART\n" % (env.now, self.cid)
+                if (i.cause == 'MTS' and self.maintain==False):
+                    self.down = True
+                    self.maintain = True
+                    print("%s,Cluster %s,MTSTART" % (env.now, self.cid))
+                    # logger += "%s,Cluster %s,MTSTART\n" % (env.now, self.cid)
+                    for node in self.nodelist:
+                        node.action.interrupt('MTS')
+                if (i.cause == 'MTE' and self.maintain==True):
+                    for node in self.nodelist:
+                        node.action.interrupt('MTE')
+                    self.down = False
+                    self.maintain = False
+                    print("%s,Cluster %s,MTEND" % (env.now, self.cid))   
+                    # logger += "%s,Cluster %s,MTEND\n" % (env.now, self.cid)
 
 def time_to_repair():
     """Return repairing time for a unexpected failure."""
@@ -204,6 +230,7 @@ def time_to_failure(lambd):
     return random.expovariate(lambd)
 
 def assignReplica(cluster, replica):
+    global logger
     i=0
     j=0
     while(i < len(replica.tasklist) and j < len(cluster.nodelist)):
@@ -211,13 +238,13 @@ def assignReplica(cluster, replica):
             cluster.nodelist[j].tid = replica.tasklist[i].tid
             replica.tasklist[i].nid = cluster.nodelist[j].nid
             cluster.avail -= 1
-            # print 'map task %d on node %d' %(replica.tasklist[i].tid, cluster.nodelist[j].nid)
             i += 1
             j += 1
         else:
             j += 1
     replica.cid = cluster.cid
-    # print 'add replica %s (Job %s) to cluster %s' %(replica.rid, replica.jid, cluster.cid)
+    print 'add replica %s (Job %s) to cluster %s' %(replica.rid, replica.jid, cluster.cid)
+    # logger += 'add replica %s (Job %s) to cluster %s\n' %(replica.rid, replica.jid, cluster.cid)
 
 def findAvailClusters(job, count):
     avail_cid=[]
@@ -249,11 +276,11 @@ def failureHandler(env, failurelog):
             if(flagType=="FS"):
                 for c in clusterlist.values():
                     if(c.zid == zid):
-                        c.action.interrupt('FS')
+                        c.action.interrupt('MTS')
             if(flagType=="FE"):
                 for c in clusterlist.values():
                     if(c.zid == zid):
-                        c.action.interrupt('FE')
+                        c.action.interrupt('MTE')
         elif ftype == "SNF":
             nid = parts[4]
             if(flagType=="FS"):
@@ -334,13 +361,13 @@ def createResource(env, joblog, clusterlog):
         jid = parts[1]
         replicas = parts[2].split(",")
         numTasks = parts[3].split(",")
-        # placement = parts[4].split(",")
-        # requirement = parts[5].split(",")
+        requirement = parts[4]
+
         i=0
         for rid in replicas:
             rid = rid.strip()
             for t in range(int(numTasks[i])):
-                aTask = Task(env, tid, rid, -1)
+                aTask = Task(env, tid, rid, jid, -1)
                 tasklist[tid] = aTask
                 tid += 1
                 temp1.append(aTask)
@@ -349,7 +376,7 @@ def createResource(env, joblog, clusterlog):
             del temp1[:]
             replicalist[rid] = aReplica
             temp2.append(aReplica)
-        aJob = Job(env, jid, temp2)
+        aJob = Job(env, jid, temp2, requirement)
         joblist[jid] = aJob
         del temp2[:]
     jfile.close()
@@ -360,84 +387,283 @@ def isAvalable(tasknum, cluster):
     else:
         return False
 
-def placeJobOnCluster(strategy):
-    strategies = strategy.split("-")
-    diff_p = int(strategies[0])
-    diff_l = int(strategies[1])
-    if(diff_p==1 and diff_l==1):
-        for job in joblist.values():
-            tasknum=0
-            for r in range(len(job.replicalist)):
-                tasknum += len(job.replicalist[r].tasklist)
-            initcid = int(job.jid) % len(clusterlist)
-            cid = initcid
-            found = True
-            while (isAvalable(tasknum,clusterlist[str(cid)])==False):
-                cid = (cid + 1)%len(clusterlist)
-                if(cid == initcid):
-                    found = False
-                    break
+def findInCandidates(pid, zid, job, s, l):
+    candidates = []
+    for cluster in clusterlist.values():
+        if(int(cluster.pid) == pid and int(cluster.zid) == zid):
+            candidates.append(cluster)
+    tasknum=0
+    l = len(job.replicalist)-len(job.replicalist)/2
+    for r in range(s, l):
+        tasknum += len(job.replicalist[r].tasklist)
+    index=0
+    found=True
+    while(isAvalable(tasknum,candidates[index])==False):
+        index += 1
+        if (index >= len(candidates)):
+            found = False
+            break
+    return found, candidates[index]
+
+def findPlacement1(job, diversity, ptype):
+    if(diversity==1):
+        tasknum=0
+        for r in range(len(job.replicalist)):
+            tasknum += len(job.replicalist[r].tasklist)
+        initcid = int(job.jid) % len(clusterlist)
+        cid = initcid
+        found = True
+        while (isAvalable(tasknum,clusterlist[str(cid)])==False):
+            cid = (cid + 1)%len(clusterlist)
+            if(cid == initcid):
+                found = False
+                break
+        if(found):
+            for r in range(3):
+                assignReplica(clusterlist[str(cid)], job.replicalist[r])
+            job.running = True
+    if(diversity==2):
+        initpid = int(job.jid) % (max_pid+1)
+        initzid = int(job.jid) % (max_zid+1)            
+        pid = initpid
+        zid = initzid
+        tryagian = True
+        while(tryagian):
+            l = len(job.replicalist)-len(job.replicalist)/2
+            found, candidate = findInCandidates(pid, zid, job, 0, l)
             if(found):
-                for r in range(3):
-                    assignReplica(clusterlist[str(cid)], job.replicalist[r])
-    if(diff_p==1 and diff_l==2):
-        for job in joblist.values():
-            initpid = int(job.jid) % (max_pid+1)
-            initzid = int(job.jid) % (max_zid+1)            
-            pid = initpid
-            zid = initzid
-            found = True
-            tryagian = True
-            while(tryagian):
-                candidates = []
-                for cluster in clusterlist.values():
-                    if(int(cluster.pid) == pid and int(cluster.zid) == zid):
-                        candidates.append(cluster)
-                tasknum=0
-                l = len(job.replicalist)-len(job.replicalist)/2
                 for r in range(l):
-                    tasknum += len(job.replicalist[r].tasklist)
-                index=0
-                while(isAvalable(tasknum,candidates[index])==False):
-                    index += 1
-                    if (index >= len(candidates)):
-                        found = False
+                    assignReplica(candidate,job.replicalist[r])
+                # for left replicas, found another logical/physical zone
+                l1 = len(job.replicalist)
+                if(ptype=="pid"):
+                    id2 = (pid+1)%(max_pid+1)
+                    id1 = pid
+                else:
+                    id2 = (zid+1)%(max_zid+1)
+                    id1 = zid
+                while(found or id2 != id1):
+                    if(ptype=="pid"):
+                        found, candidate = findInCandidates(id2, zid, job, l, l1)
+                    else:
+                        found, candidate = findInCandidates(pid, id2, job, l, l1)
+                    if(found):
+                        for r in range(l, l1):
+                            assignReplica(candidate,job.replicalist[r])
+                        job.running = True
+                        tryagian = False
                         break
-                if(found):
-                    for r in range(l):
-                        assignReplica(candidates[index],job.replicalist[r])
-                    # for left replicas, found another logical zone
-                    l1 = len(job.replicalist) - l
-                    zid2 = (zid+1)%(max_zid+1)
-                    while(found or zid2 != zid):
-                        candidates = []
-                        for cluster in clusterlist.values():
-                            if(int(cluster.pid) == pid and int(cluster.zid) == zid2):
-                                candidates.append(cluster)
-                        tasknum=0
-                        for r in range(l1):
-                            tasknum += len(job.replicalist[r].tasklist)
-                        index=0
-                        while(isAvalable(tasknum,candidates[index])==False):
-                            index += 1
-                            if (index >= len(candidates)):
-                                found = False
-                                break
-                        if(found):
-                            for r in range(l1):
-                                assignReplica(candidates[index],job.replicalist[l+r])
-                                tryagian = False
-                            break
+                    else:
+                        if(ptype=="pid"):
+                            id2 = (id2+1)%(max_pid+1)
                         else:
-                            zid2 = (zid2+1)%(max_zid+1)   
-                # next try:
+                            id2 = (id2+1)%(max_zid+1)   
+            # next try:
+            if(ptype=="pid"):
+                pid = (pid+1)%(max_pid+1)                 
+                if(pid == initpid):
+                    # next logical zone
+                    zid = (zid+1)%(max_zid+1)
+                    pid = initpid
+                    if(zid == initzid):
+                        break        
+            else:
                 zid = (zid+1)%(max_zid+1)                 
                 if(zid == initzid):
                     # next physical location
                     pid = (pid+1)%(max_pid+1)
                     zid = initzid
                     if(pid == initpid):
-                        break
+                        break                     
+    if(diversity==3):
+        initpid = int(job.jid) % (max_pid+1)
+        initzid = int(job.jid) % (max_zid+1)            
+        pid = initpid
+        zid = initzid
+        tryagian = True
+        l=[]
+        l.append(0)
+        if(len(job.replicalist)%3 == 0):
+            l.append(len(job.replicalist)/3)
+        else: 
+            l.append(len(job.replicalist)/3+1)
+        if((len(job.replicalist)-l[0])%2 == 0):
+            l.append(l[0]+(len(job.replicalist) - l[0])/2)
+        else:
+            l.append(l[0]+(len(job.replicalist) - l[0])/2 + 1)
+        l.append(len(job.replicalist))
+        while(tryagian):
+            if(ptype=="pid"):
+                id_range = range(max_pid+1)
+            else:
+                id_range = range(max_zid+1)
+            for i in range(3):
+                sid = random.choice(id_range)
+                if(ptype=="pid"):
+                    found, candidate = findInCandidates(sid, zid, job, l[i], l[i+1])
+                else:
+                    found, candidate = findInCandidates(pid, sid, job, l[i], l[i+1])
+                if(found):
+                    for r in range(l[i], l[i+1]):
+                        assignReplica(candidate,job.replicalist[r])
+                    id_range.remove(sid)
+                else:
+                    for rid in id_range:
+                        if(ptype=="pid"):
+                            found, candidate = findInCandidates(rid, zid, job, l[i], l[i+1])
+                        else:
+                            found, candidate = findInCandidates(pid, rid, job, l[i], l[i+1])
+                        if(found):
+                            for r in range(l[i], l[i+1]):
+                                assignReplica(candidate,job.replicalist[r])
+                            id_range.remove(rid)
+                            break
+                    if(found==False):
+                        tryagian=True
+                        #next try
+                        pid = (pid+1)%(max_pid+1)
+                        zid = (zid+1)%(max_zid+1)
+                        if(ptype=="pid"):
+                            if(zid == initzid):
+                                tryagian = False
+                        else:
+                            if(zid == initzid):
+                                tryagian = False
+            if(found):
+                job.running = True
+                tryagian = False
+
+def findPlacement2(job, diversity, ptype):
+    l=[]
+    l.append(0)
+    if(len(job.replicalist)%3 == 0):
+        l.append(len(job.replicalist)/3)
+    else: 
+        l.append(len(job.replicalist)/3+1)
+    if((len(job.replicalist)-l[0])%2 == 0):
+        l.append(l[0]+(len(job.replicalist) - l[0])/2)
+    else:
+        l.append(l[0]+(len(job.replicalist) - l[0])/2 + 1)
+    l.append(len(job.replicalist))
+    if(diversity==2):
+        tryagian = True
+        count = 0 
+        while(tryagian and count <= 20):
+            count +=1
+            pid_range = range(max_pid+1)
+            zid_range = range(max_zid+1) 
+            pid_list=[]
+            zid_list=[]
+            for i in range(2):
+                pid = random.choice(pid_range)
+                zid = random.choice(zid_range)
+                found, candidate = findInCandidates(pid, zid, job, l[i], l[i+1])
+                if(found):
+                    for r in range(l[i], l[i+1]):
+                        assignReplica(candidate,job.replicalist[r])
+                    pid_list.append(pid)
+                    zid_list.append(zid)
+                    pid_range.remove(pid)
+                    zid_range.remove(zid)
+                else:
+                    break
+            if(found):
+                #third replica
+                found, candidate = findInCandidates(pid_list[0], zid_list[1], job, l[2], l[3])
+                if(found):
+                    for r in range(l[2], l[3]):
+                        assignReplica(candidate,job.replicalist[r])
+                    job.running = True
+                    tryagian = False
+                else:
+                    found, candidate = findInCandidates(pid_list[1], zid_list[0], job, l[2], l[3])
+                    if(found):
+                        for r in range(l[2], l[3]):
+                            assignReplica(candidate,job.replicalist[r])
+                        job.running = True
+                        tryagian = False
+    if(diversity==3):
+        tryagian = True
+        count = 0
+        while(tryagian and count <= 20):
+            count +=1
+            pid_range = range(max_pid+1)
+            zid_range = range(max_zid+1) 
+            if(ptype=="pid"):
+                pid_list = random.sample(pid_range,3)
+                zid_list = random.sample(zid_range, 2)
+            else:
+                pid_list = random.sample(pid_range,2)
+                zid_list = random.sample(zid_range, 3)
+            for i in range(3):
+                if(ptype=="pid"):
+                    pid = pid_list[i]
+                    zid = zid_list[i%2]
+                else:
+                    pid = pid_list[i%2]
+                    zid = zid_list[i]
+                found, candidate = findInCandidates(pid, zid, job, l[i], l[i+1])
+                if(found):
+                    for r in range(l[i], l[i+1]):
+                        assignReplica(candidate,job.replicalist[r])
+                else: # next try
+                    break
+            if(found):
+                job.running = True
+                tryagian = False
+
+def findPlacement3(job):
+    l=[]
+    l.append(0)
+    if(len(job.replicalist)%3 == 0):
+        l.append(len(job.replicalist)/3)
+    else: 
+        l.append(len(job.replicalist)/3+1)
+    if((len(job.replicalist)-l[0])%2 == 0):
+        l.append(l[0]+(len(job.replicalist) - l[0])/2)
+    else:
+        l.append(l[0]+(len(job.replicalist) - l[0])/2 + 1)
+    l.append(len(job.replicalist))
+    tryagian = True
+    count = 0
+    while(tryagian and count <= 20):
+        count +=1
+        pid_range = range(max_pid+1)
+        zid_range = range(max_zid+1)
+        for i in range(3):
+            pid = random.choice(pid_range)
+            zid = random.choice(zid_range)
+            found, candidate = findInCandidates(pid, zid, job, l[i], l[i+1])
+            if(found):
+                for r in range(l[i], l[i+1]):
+                    assignReplica(candidate,job.replicalist[r])
+                pid_range.remove(pid)
+                zid_range.remove(zid)
+            else:
+                break
+        if(found):
+            job.running = True
+            tryagian = False
+
+def placeJobOnCluster(strategy):
+    for job in joblist.values():
+        if(job.requirement == "NAN"):
+            strategies = strategy.split("-")
+        else:
+            strategies = job.requirement.split("-")
+        diff_p = int(strategies[0])
+        diff_l = int(strategies[1])
+
+        if(diff_p==1):
+            findPlacement1(job, diff_l, "zid")
+        elif(diff_l==1):
+            findPlacement1(job, diff_p, "pid")
+        elif(diff_p==2):
+            findPlacement2(job, diff_l, "zid")
+        elif(diff_l==2):
+            findPlacement2(job, diff_p, "pid")
+        else: #3-3
+            findPlacement3(job)
 
 if __name__ == "__main__":
     p = OptionParser()
@@ -487,11 +713,11 @@ if __name__ == "__main__":
     env = simpy.Environment()
     createResource(env, opts.joblog, opts.clusterlog)
     placeJobOnCluster(opts.strategy)
-    # for node in nodelist:
-    #     print node.tid
-    # for r in replicalist:
-    #     print r.rid
     env.process(failureHandler(env, opts.failurelog))
 
     # Execute!
     env.run(until=SIM_TIME)
+
+    # outfile = open(OUTPUT, "w")
+    # outfile.write(logger)
+    # outfile.close()

@@ -1,27 +1,17 @@
 #!/bin/bash
+TESTNAME="test1"
 
-for i in {1..10}
+echo 'begin '"$TESTNAME"
+./loggenerator.py -c "$TESTNAME".config
+wait
+for i in {1..3}
 do
-    ./loggenerator.py -c test1.config
-    wait
-    ./sim.py -j test1_job.log -c test1_cluster.log -f test1_failure.log -s 1-1 > output.log
-    wait
-    cat -n output.log | sort -uk2 | sort -nk1 | cut -f2- > result.txt
-    wait
-    ./parseresult.py -f result.txt -s 1-1
-    wait
-
-    ./sim.py -j test1_job.log -c test1_cluster.log -f test1_failure.log -s 1-2 > output.log
-    wait
-    cat -n output.log | sort -uk2 | sort -nk1 | cut -f2- > result.txt
-    wait
-    ./parseresult.py -f result.txt -s 1-2
-    wait
-
-    # ./sim.py -j test1_job.log -c test1_cluster.log -f test1_failure.log -s 1-3 > output.log
-    # wait
-    # cat -n output.log | sort -uk2 | sort -nk1 | cut -f2- > result.txt
-    # wait
-    # ./parseresult.py -f result.txt
-    # wait
+    for j in {1..3}
+    do
+        ./sim.py -j "$TESTNAME"_job.log -c "$TESTNAME"_cluster.log -f "$TESTNAME"_failure.log -s "$i"-"$j" > "$TESTNAME"_"$i"-"$j"
+        wait
+        echo 'done simulation '"$TESTNAME"'_'"$i"'-'"$j"
+    done
 done
+echo 'calculating results...'
+./parseresult.py -t "$TESTNAME" -j "$TESTNAME"_job.log

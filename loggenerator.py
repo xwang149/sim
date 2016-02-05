@@ -85,7 +85,7 @@ def generateJob(configs, total_nodes, outfile):
             l1 = l1[1:l1.rfind("]")]  
             l2 = "%s" % rids
             l2 = l2[1:l2.rfind("]")]
-            joblog.write("%s;%s;%s;%s\n" % (0,jid, l2, l1))
+            joblog.write("%s;%s;%s;%s;NAN\n" % (0,jid, l2, l1))
             del tasks[:]
             del rids[:]
     elif task_type == 1:
@@ -101,7 +101,7 @@ def generateJob(configs, total_nodes, outfile):
             l1 = l1[1:l1.rfind("]")]  
             l2 = "%s" % rids
             l2 = l2[1:l2.rfind("]")]
-            joblog.write("%s;%s;%s;%s\n" % (0,jid, l2, l1))
+            joblog.write("%s;%s;%s;%s;NAN\n" % (0,jid, l2, l1))
             del tasks[:]
             del rids[:] 
         jobleft = num_job-num_job/2 
@@ -122,12 +122,12 @@ def generateJob(configs, total_nodes, outfile):
             l1 = l1[1:l1.rfind("]")]  
             l2 = "%s" % rids
             l2 = l2[1:l2.rfind("]")]
-            joblog.write("%s;%s;%s;%s\n" % (0,jid, l2, l1))
+            joblog.write("%s;%s;%s;%s;NAN\n" % (0,jid, l2, l1))
             del tasks[:]
             del rids[:]
     joblog.close()        
 
-def generateFailure(configs, outfile):
+def generateFailure(configs, total_nodes, outfile):
     
     clusters = int(configs["NUM_CLUSTER_PER_METRO"])
     metros = int(configs["NUM_METRO"])
@@ -143,15 +143,17 @@ def generateFailure(configs, outfile):
     mt_interval = float(configs["MT_INTERVAL_IN_DAYS"]) * 24 * 60 * 60
     mt_duration = float(configs["MT_DURATION_IN_DAYS"]) * 24 * 60 * 60
 
-    # maintain = []
     failures = []
+
     # generate maintainance schedule
-    mid = 0
     i=0
     for zid in range(lzs):
         t = zid * (mt_duration + 1)
-        while (t < sim_time): 
+        while (True): 
             time = t + mt_interval
+            t = time+mt_duration
+            if(t > sim_time):
+                break            
             failures.append([])
             failures[i].append(time)
             failures[i].append("FS")
@@ -166,31 +168,21 @@ def generateFailure(configs, outfile):
             failures[i].append("LZ")
             failures[i].append(zid) 
             i += 1           
-            # print "%f,%f, %f"%(time,time+mt_duration, mt_duration)
-            # maintain[mid]={}
-            # maintain[mid]["time"] = time
-            # maintain[mid]["duration"] = mt_duration
-            # maintain[mid]["type"] = "MT"
-            # maintain[mid]["target_type"] = "LZ"
-            # maintain[mid]["target"] = zid
-            # failurelog.write("%s;%s;%s;%s;%s\n" % (maintain[mid]["time"], maintain[mid]["duration"], 
-                # maintain[mid]["type"], maintain[mid]["target_type"], maintain[mid]["target"]))
-            t = time
-            mid += 1
+
     # generate node failures
-    fid = 0
-    for nid in range(nodes):
+    for nid in range(total_nodes):
         lambd = random.uniform(lambda_min, lambda_max)
         t = 0
-        while(t < sim_time):
+        while(True):
             time = t + random.expovariate(lambd)
-            # failures[fid]={}
-            failures.append([])
-            failures[i].append(time)
-            # failures[fid]["time"] = time
             k=random.normalvariate(repair_mean, repair_sigma)
             while (k<=0):
                 k=random.normalvariate(repair_mean, repair_sigma)
+            t = time + k
+            if(t > sim_time):
+                break
+            failures.append([])
+            failures[i].append(time)
             failures[i].append("FS")
             failures[i].append("SNF")
             failures[i].append("SN")
@@ -203,31 +195,9 @@ def generateFailure(configs, outfile):
             failures[i].append("SN")
             failures[i].append(nid)
             i += 1
-            # failures[fid]["duration"] = k
-            # failures[fid]["type"] = "SNF"
-            # failures[fid]["target_type"] = "SN"
-            # failures[fid]["target"] = nid
-            # failurelog.write("%s;%s;%s;%s;%s\n" % (failures[fid]["time"], failures[fid]["duration"], 
-                    # failures[fid]["type"], failures[fid]["target_type"], failures[fid]["target"]))
-            t = time + k
-            fid += 1
+
     # sort by time
     sorted_f = sorted(failures, key=lambda data_entry: float(data_entry[0]))
-    # print sorted_f
-    # i = 0
-    # j = 0
-    # line=""
-    # while (i < len(maintain)):
-    #     while (j < len(failures)):
-    #         if (maintain[i]["time"]<= failures[j]["time"]):
-    #             line += "%s;%s;%s;%s;%s\n" % (maintain[i]["time"], maintain[i]["duration"], 
-    #                 maintain[i]["type"], maintain[i]["target_type"], maintain[i]["target"])
-    #             i += 1
-    #         else:
-    #             line += "%s;%s;%s;%s;%s\n" % (failures[j]["time"], failures[j]["duration"], 
-    #                 failures[j]["type"], failures[j]["target_type"], failures[j]["target"])
-    #             j += 1
-    # failurelog.write(line)
     failurelog = file(outfile, "w")
     np.savetxt(failurelog, sorted_f, fmt='%s', delimiter=';')
     failurelog.close()
@@ -249,5 +219,5 @@ if __name__ == "__main__":
     random.seed(RANDOM_SEED)
     total_nodes = generateCluster(configs, outfile+"_cluster.log")
     generateJob(configs, total_nodes, outfile+"_job.log")
-    generateFailure(configs, outfile+"_failure.log")
+    generateFailure(configs, total_nodes, outfile+"_failure.log")
     exit()
