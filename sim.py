@@ -4,9 +4,9 @@ import math
 import simpy
 from optparse import OptionParser
 
-RANDOM_SEED = 42
-REPAIR_MEAN = 450.0 * 60       # Avg. repair time in seconds
-REPAIR_SIGMA = 4000.0          # Sigma of processing time
+# RANDOM_SEED = 42
+# REPAIR_MEAN = 450.0 * 60       # Avg. repair time in seconds
+# REPAIR_SIGMA = 4000.0          # Sigma of processing time
 max_pid = 0
 max_zid = 0
 
@@ -221,13 +221,13 @@ class Cluster(object):
                     print("%s,Cluster %s,MTEND" % (env.now, self.cid))   
                     # logger += "%s,Cluster %s,MTEND\n" % (env.now, self.cid)
 
-def time_to_repair():
-    """Return repairing time for a unexpected failure."""
-    return random.normalvariate(REPAIR_MEAN, REPAIR_SIGMA)
+# def time_to_repair():
+#     """Return repairing time for a unexpected failure."""
+#     return random.normalvariate(REPAIR_MEAN, REPAIR_SIGMA)
 
-def time_to_failure(lambd):
-    """Return time until next unexpected failure."""
-    return random.expovariate(lambd)
+# def time_to_failure(lambd):
+#     """Return time until next unexpected failure."""
+#     return random.expovariate(lambd)
 
 def assignReplica(cluster, replica):
     global logger
@@ -668,7 +668,7 @@ def placeJobOnCluster(strategy):
 if __name__ == "__main__":
     p = OptionParser()
     p.add_option("-t", "--simtime", dest = "simtime", type = "int", 
-                    help = "length of simulation time in weeks") 
+                    help = "length of simulation time in days") 
     p.add_option("-j", "--joblog", dest = "joblog", type = "string", 
                     help = "path of job log file")
     p.add_option("-c", "--clusterlog", dest = "clusterlog", type = "string", 
@@ -707,7 +707,7 @@ if __name__ == "__main__":
     if opts.simtime:
         SIM_TIME = opts.simtime * 24 * 60 * 60
 
-    random.seed(RANDOM_SEED)
+    # random.seed(RANDOM_SEED)
 
     # Create an environment and start the setup process
     env = simpy.Environment()
