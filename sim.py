@@ -241,7 +241,7 @@ class Cluster(object):
             except simpy.Interrupt as i:
                 if (i.cause == 'FS' and self.maintain==False and self.down==False):
                     self.down = True
-                    print("%s,Cluster %s,STOP" % (env.now, self.cid))
+                    # print("%s,Cluster %s,STOP" % (env.now, self.cid))
                     # logger += "%s,Cluster %s,STOP\n" % (env.now, self.cid)
                     for domain in self.domainlist:
                         domain.action.interrupt('FS')
@@ -249,7 +249,7 @@ class Cluster(object):
                     for domain in self.domainlist:
                         domain.action.interrupt('FE')
                     self.down = False
-                    print("%s,Cluster %s,RESTART" % (env.now, self.cid))
+                    # print("%s,Cluster %s,RESTART" % (env.now, self.cid))
                     # logger +=  "%s,Cluster %s,RESTART\n" % (env.now, self.cid)
                 if (i.cause == 'MTS' and self.maintain==False):
                     self.down = True
@@ -290,7 +290,7 @@ def assignReplica(partition, replica):
         else:
             j += 1
     replica.pid = partition.pid
-    print 'add replica %s (Job %s) to partition %s' %(replica.rid, replica.jid, partition.pid)
+    print 'add replica %s (Job %s) to partition %s (Cluster %s)' %(replica.rid, replica.jid, partition.pid, partition.cid)
     # logger += 'add replica %s (Job %s) to cluster %s\n' %(replica.rid, replica.jid, cluster.cid)
 
 def findAvailPartition(job, count):
@@ -732,20 +732,22 @@ def findPlacement(job, diff_l, diff_p):
                 assignReplica(partlist[pid], job.replicalist[index])
                 assigned += 1
                 index += 1
+
             else:
                 break
         if(assigned==diff_p):
             remain = length - diff_p
             for i in range(remain):
                 for pid in pids:
-                    tasknum = len(job.replicalist[diff_p+i].tasklist)
+                    tasknum = len(job.replicalist[index+i].tasklist)
                     if(partlist[pid].avail >= tasknum):
-                        assignReplica(partlist[pid], job.replicalist[index])
+                        assignReplica(partlist[pid], job.replicalist[index+i])
                         assigned += 1
                         break   
     if(assigned < length):
         print "add Job %s fail" % job.jid
-             
+    else:
+        job.running = True
 
 def placeJobOnCluster(strategy):
     for job in joblist.values():

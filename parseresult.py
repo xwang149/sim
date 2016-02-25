@@ -7,17 +7,17 @@ import numpy as np
 
 X_MAX = 7200000
 
-def testDowngrade(jobprofile, threshold):
+def testDowngrade(activetask, threshold):
     downgrade = -1
     for i in range(len(threshold)):
-        if(jobprofile["activetasks"]==threshold[i]):
+        if(threshold[i]==activetask):
             downgrade = 9-i
     return downgrade
 
-def testUpgrade(jobprofile, threshold):
+def testUpgrade(activetask, threshold):
     upgrade = -1
     for i in range(len(threshold)):
-        if(jobprofile["activetasks"]==threshold[i]+1):
+        if(threshold[i]+1==activetask):
             upgrade = 9-i
     return upgrade
 
@@ -62,15 +62,14 @@ def parseLogfile(testname, joblogfile, conf, outfile):
 
     # print thresholds
     outputline = ""
-    downtimes={}
     for p in range(1, 4):
-        for z in range(1, 4):
+        for z in range(p, 4):
             singleresult = {}
             active = {}
             print "read %s_%s-%s" %(testname, p, z)
             wlf = open(testname+"_"+str(p)+"-"+str(z), "r")
             strategy = str(p)+"-"+str(z)
-            downtimeresult = {}
+            downtimes = {}
             for line in wlf:
                 line = line.strip('\n')
                 line = line.strip('\r')
@@ -105,17 +104,19 @@ def parseLogfile(testname, joblogfile, conf, outfile):
                         active[jid] -= 1
                         singleresult[jid]["time"].append(time)
                         singleresult[jid]["activetasks"].append(active[jid])
-                        downgrade = testDowngrade(singleresult[jid], thresholds[jid])
+                        downgrade = testDowngrade(active[jid], thresholds[jid])
+                        # print "active %s: %s "%(jid, active[jid])
                         if(downgrade != -1):
                             downtimes[jid][downgrade]["start"].append(time)
                     if(action=="RESTART"):
                         active[jid] += 1
                         singleresult[jid]["time"].append(time)
                         singleresult[jid]["activetasks"].append(active[jid])
-                        upgrade = testUpgrade(singleresult[jid], thresholds[jid])
+                        upgrade = testUpgrade(active[jid], thresholds[jid])
+                        # print "active %s: %s "%(jid, active[jid])
                         if(upgrade != -1):
                             downtimes[jid][upgrade]["stop"].append(time)   
-            # print singleresult[jid]["activetasks"]
+            # print downtimes
             #prepare data
             for jid in singleresult.keys():
                 timeline = []
@@ -139,16 +140,16 @@ def parseLogfile(testname, joblogfile, conf, outfile):
                     length = singleresult[jid]["time"][i+1] - singleresult[jid]["time"][i]
                     actualactive += singleresult[jid]["activetasks"][i] * length
                 percentage = '{0:.2%}'.format(float(actualactive)/allactive)
-                print percentage
-                outputline += "%d,%d,%s,%s\n"%(p, z, jid, float(actualactive)/allactive)
+                # print percentage
+                # outputline += "%d,%d,%s,%s\n"%(p, z, jid, float(actualactive)/allactive)
                 
                 #plot figure
-                singleresult[jid]["activetasks"].append(singleresult[jid]["activetasks"][-1])
-                i=0
-                while(singleresult[jid]["time"][i]<= X_MAX):
-                    timeline.append(singleresult[jid]["time"][i]/3600.0)
-                    taskline.append(singleresult[jid]["activetasks"][i])
-                    i += 1
+                # singleresult[jid]["activetasks"].append(singleresult[jid]["activetasks"][-1])
+                # i=0
+                # while(singleresult[jid]["time"][i]<= X_MAX):
+                #     timeline.append(singleresult[jid]["time"][i]/3600.0)
+                #     taskline.append(singleresult[jid]["activetasks"][i])
+                #     i += 1
                 # maxline = []      
                 # for i in range(sim_time/60/60+1):
                 #     timeline.append(i)
@@ -185,7 +186,7 @@ def parseLogfile(testname, joblogfile, conf, outfile):
             for jid in downtimes.keys():
                 for grade in downtimes[jid].keys():
                     if not downtimes[jid][grade]["start"]:
-                        print "no result"
+                        singleresult[jid]["downtime"][grade] = 0
                     else:
                         arr1 = np.array(downtimes[jid][grade]["start"])
                         arr2 = np.array(downtimes[jid][grade]["stop"])
@@ -197,12 +198,13 @@ def parseLogfile(testname, joblogfile, conf, outfile):
                         total=0
                         for i in range(len(stop_time)):
                             total += stop_time[i]
-                        singleresult[jid]["downtime"][grade]=float(total/sim_time)
+                        singleresult[jid]["downtime"][grade]=total
+                        # print "J%s,Grade %d; total=%d" %(jid, grade, total)
 
             sorted_jids = singleresult.keys()
             sorted_jids = sorted(sorted_jids)
             for jid in sorted_jids:
-                outputline += "%s,%s,"%(strategy, jid)
+                outputline += "%s,%s,%s,"%(p,z, jid)
                 sorted_keys = singleresult[jid]["downtime"].keys()
                 sorted_keys = sorted(sorted_keys, reverse=True)
                 for grade in sorted_keys:
