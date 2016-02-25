@@ -29,30 +29,26 @@ def parseConfig(filename):
 def generateCluster(configs, outfile):
     clusterlog = open(outfile, "w")
 
-    clusters = int(configs["NUM_CLUSTER_PER_METRO"])
-    metros = int(configs["NUM_METRO"])
+    clusters = int(configs["NUM_CLUSTER"])
+    parts = int(configs["NUM_PART"])
     lzs = int(configs["NUM_LZ"])
-    nodes = int(configs["NUM_NODE_PER_CLUSTER"])
+    nodes = int(configs["NUM_CLUSTER_PER_CLUSTER"])
 
-    total_nodes = clusters * nodes * metros
+    total_nodes = clusters * nodes
 
     id1 = 0
     id2 = 0
-    nids = []
-    for k in range(metros):
-        for i in range(clusters):
-            line = ""
-            for j in range(nodes):
-                nids.append(id1)
-                id1 += 1
-            line = "%s" % nids
-            line = line[1:line.rfind("]")]
-            del nids[:]    
-            cid = id2
-            pid = k
-            zid = cid % lzs
-            clusterlog.write("%s;%s;%s;%s\n" % (cid, pid, zid, line))
-            id2 += 1
+    for k in range(clusters):
+        line = ""
+        s_nid = id1
+        e_nid = id1 + nodes - 1
+        id1 = e_nid + 1
+        cid = k
+        s_pid = id2
+        e_pid = id2 + parts - 1
+        zid = cid % lzs
+        clusterlog.write("%s;%s;%s,%s;%s,%s\n" % (cid, zid, s_pid, e_pid, s_nid, e_nid))
+        id2 = e_pid + 1
     clusterlog.close()
     return total_nodes
 
@@ -129,17 +125,26 @@ def generateJob(configs, total_nodes, outfile):
 
 def generateFailure(configs, total_nodes, outfile):
     
-    clusters = int(configs["NUM_CLUSTER_PER_METRO"])
-    metros = int(configs["NUM_METRO"])
+    clusters = int(configs["NUM_CLUSTER"])
+    parts = int(configs["NUM_PART"])
     lzs = int(configs["NUM_LZ"])
-    nodes = int(configs["NUM_NODE_PER_CLUSTER"])
+    nodes = int(configs["NUM_CLUSTER_PER_CLUSTER"])
+
+    partition = clusters * parts
 
     sim_time = int(configs["SIM_TIME_IN_DAYS"]) * 24 * 60 * 60
-    lambda_range = configs["LAMBDA_RANGE_PER_HOUR"].split(",")
-    lambda_min = float(lambda_range[0]) / 60 / 60
-    lambda_max = float(lambda_range[1]) / 60 / 60
-    repair_mean = float(configs["REPAIR_MEAN"]) * 60
-    repair_sigma = float(configs["REPAIR_SIGMA"])
+    p_lambda_range = configs["P_LAMBDA_RANGE_PER_HOUR"].split(",")
+    p_lambda_min = float(p_lambda_range[0]) / 60 / 60
+    p_lambda_max = float(p_lambda_range[1]) / 60 / 60
+    p_repair_mean = float(configs["P_REPAIR_MEAN"]) * 60
+    p_repair_sigma = float(configs["P_REPAIR_SIGMA"]) * 60
+
+    c_lambda_range = configs["C_LAMBDA_RANGE_PER_HOUR"].split(",")
+    c_lambda_min = float(c_lambda_range[0]) / 60 / 60
+    c_lambda_max = float(c_lambda_range[1]) / 60 / 60
+    c_repair_mean = float(configs["C_REPAIR_MEAN"]) * 60
+    c_repair_sigma = float(configs["C_REPAIR_SIGMA"])  * 60
+
     mt_interval = float(configs["MT_INTERVAL_IN_DAYS"]) * 24 * 60 * 60
     mt_duration = float(configs["MT_DURATION_IN_DAYS"]) * 24 * 60 * 60
 
@@ -169,31 +174,58 @@ def generateFailure(configs, total_nodes, outfile):
             failures[i].append(zid) 
             i += 1           
 
-    # generate node failures
-    for nid in range(total_nodes):
-        lambd = random.uniform(lambda_min, lambda_max)
+    # generate partition failures
+    for pid in range(partition):
+        lambd = random.uniform(p_lambda_min, p_lambda_max)
         t = 0
         while(True):
             time = t + random.expovariate(lambd)
-            k=random.normalvariate(repair_mean, repair_sigma)
+            k=random.normalvariate(p_repair_mean, p_repair_sigma)
             while (k<=0):
-                k=random.normalvariate(repair_mean, repair_sigma)
+                k=random.normalvariate(p_repair_mean, p_repair_sigma)
             t = time + k
             if(t > sim_time):
                 break
             failures.append([])
             failures[i].append(time)
             failures[i].append("FS")
-            failures[i].append("SNF")
-            failures[i].append("SN")
-            failures[i].append(nid)
+            failures[i].append("MNF")
+            failures[i].append("Partition")
+            failures[i].append(pid)
             i += 1
             failures.append([])
             failures[i].append(time+k)
             failures[i].append("FE")
-            failures[i].append("SNF")
-            failures[i].append("SN")
-            failures[i].append(nid)
+            failures[i].append("MNF")
+            failures[i].append("Partition")
+            failures[i].append(pid)
+            i += 1
+
+    # generate cluster failures
+    for cid in range(clusters):
+        lambd = random.uniform(c_lambda_min, c_lambda_max)
+        t = 0
+        while(True):
+            time = t + random.expovariate(lambd)
+            k=random.normalvariate(c_repair_mean, c_repair_sigma)
+            while (k<=0):
+                k=random.normalvariate(c_repair_mean, c_repair_sigma)
+            t = time + k
+            if(t > sim_time):
+                break
+            failures.append([])
+            failures[i].append(time)
+            failures[i].append("FS")
+            failures[i].append("MNF")
+            failures[i].append("Cluster")
+            failures[i].append(cid)
+            i += 1
+            failures.append([])
+            failures[i].append(time+k)
+            failures[i].append("FE")
+            failures[i].append("MNF")
+            failures[i].append("Cluster")
+            failures[i].append(cid)
             i += 1
 
     # sort by time

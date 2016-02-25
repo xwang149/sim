@@ -19,6 +19,7 @@ joblist = {}
 replicalist = {}
 tasklist = {}
 nodelist = {}
+partlist = {}
 clusterlist = {}
 
 class Job(object):
@@ -54,11 +55,11 @@ class Job(object):
                     # logger += "%s,Job %s,RESTART\n" % (env.now, self.jid)
 
 class Replica(object):
-    def __init__(self, env, rid, jid, cid, tasklist):
+    def __init__(self, env, rid, jid, pid, tasklist):
         self.env = env
         self.rid = rid
         self.jid = jid
-        self.cid = cid
+        self.pid = pid
         self.tasklist = list(tasklist)
         self.failure = False
         self.action = env.process(self.run())
@@ -80,12 +81,12 @@ class Replica(object):
                     #         alive += 1
                     # if (alive < threshold):
                     if (self.failure == True):
-                        print("%s,Replica %s (Job %s),STOP" % (env.now, self.rid, self.jid))
+                        # print("%s,Replica %s (Job %s),STOP" % (env.now, self.rid, self.jid))
                         # logger += "%s,Replica %s (Job %s),STOP\n" % (env.now, self.rid, self.jid)
                         joblist[self.jid].action.interrupt('RD')
                 if (i.cause == 'TU' and self.failure==True):
                     self.failure = False
-                    print("%s,Replica %s (Job %s),RESTART" % (env.now, self.rid, self.jid))
+                    # print("%s,Replica %s (Job %s),RESTART" % (env.now, self.rid, self.jid))
                     # logger += "%s,Replica %s (Job %s),RESTART\n" % (env.now, self.rid, self.jid)
                     joblist[self.jid].action.interrupt('RU')            
 
@@ -119,10 +120,11 @@ class Task(object):
 
 class Node(object):
 
-    def __init__(self, env, nid, cid, tid):
+    def __init__(self, env, nid, cid, pid, tid):
         self.env = env
         self.nid = nid
         self.cid = cid
+        self.pid = pid
         self.tid = tid
         self.down = False
         self.maintain = False
@@ -175,13 +177,11 @@ class Node(object):
     #             yield self.env.timeout(time_to_repair())
     #             self.action.interrupt('FE')
 
-class Cluster(object):
-
-    def __init__(self, env, cid, pid, zid, nodelist, capacity):
+class Partition(object):
+    def __init__(self, env, pid, cid, nodelist, capacity):
         self.env = env
-        self.cid = cid
         self.pid = pid
-        self.zid = zid
+        self.cid = cid
         self.avail = capacity
         self.nodelist = list(nodelist)
         self.down = False
@@ -196,13 +196,58 @@ class Cluster(object):
             except simpy.Interrupt as i:
                 if (i.cause == 'FS' and self.maintain==False and self.down==False):
                     self.down = True
-                    print("%s,Cluster %s,STOP" % (env.now, self.cid))
+                    # print("%s,Domain %s,STOP" % (env.now, self.pid))
                     # logger += "%s,Cluster %s,STOP\n" % (env.now, self.cid)
                     for node in self.nodelist:
                         node.action.interrupt('FS')
                 if (i.cause == 'FE' and self.maintain==False and self.down==True):
                     for node in self.nodelist:
                         node.action.interrupt('FE')
+                    self.down = False
+                    # print("%s,Domain %s,RESTART" % (env.now, self.pid))
+                    # logger +=  "%s,Cluster %s,RESTART\n" % (env.now, self.cid)
+                if (i.cause == 'MTS' and self.maintain==False):
+                    self.down = True
+                    self.maintain = True
+                    # print("%s,Domain %s,MTSTART" % (env.now, self.pid))
+                    # logger += "%s,Cluster %s,MTSTART\n" % (env.now, self.pid)
+                    for node in self.nodelist:
+                        node.action.interrupt('MTS')
+                if (i.cause == 'MTE' and self.maintain==True):
+                    for node in self.nodelist:
+                        node.action.interrupt('MTE')
+                    self.down = False
+                    self.maintain = False
+                    # print("%s,Domain %s,MTEND" % (env.now, self.pid))   
+                    # logger += "%s,Cluster %s,MTEND\n" % (env.now, self.cid)    
+
+class Cluster(object):
+
+    def __init__(self, env, cid, zid, domainlist, capacity):
+        self.env = env
+        self.cid = cid
+        self.zid = zid
+        self.avail = capacity
+        self.domainlist = list(domainlist)
+        self.down = False
+        self.maintain = False
+        self.action = env.process(self.working())
+
+    def working(self):
+        global logger     
+        while True:           
+            try:
+                yield self.env.timeout(SIM_TIME)
+            except simpy.Interrupt as i:
+                if (i.cause == 'FS' and self.maintain==False and self.down==False):
+                    self.down = True
+                    print("%s,Cluster %s,STOP" % (env.now, self.cid))
+                    # logger += "%s,Cluster %s,STOP\n" % (env.now, self.cid)
+                    for domain in self.domainlist:
+                        domain.action.interrupt('FS')
+                if (i.cause == 'FE' and self.maintain==False and self.down==True):
+                    for domain in self.domainlist:
+                        domain.action.interrupt('FE')
                     self.down = False
                     print("%s,Cluster %s,RESTART" % (env.now, self.cid))
                     # logger +=  "%s,Cluster %s,RESTART\n" % (env.now, self.cid)
@@ -211,11 +256,11 @@ class Cluster(object):
                     self.maintain = True
                     print("%s,Cluster %s,MTSTART" % (env.now, self.cid))
                     # logger += "%s,Cluster %s,MTSTART\n" % (env.now, self.cid)
-                    for node in self.nodelist:
-                        node.action.interrupt('MTS')
+                    for domain in self.domainlist:
+                        domain.action.interrupt('MTS')
                 if (i.cause == 'MTE' and self.maintain==True):
-                    for node in self.nodelist:
-                        node.action.interrupt('MTE')
+                    for domain in self.domainlist:
+                        domain.action.interrupt('MTE')
                     self.down = False
                     self.maintain = False
                     print("%s,Cluster %s,MTEND" % (env.now, self.cid))   
@@ -229,35 +274,37 @@ class Cluster(object):
 #     """Return time until next unexpected failure."""
 #     return random.expovariate(lambd)
 
-def assignReplica(cluster, replica):
+def assignReplica(partition, replica):
     global logger
     i=0
     j=0
-    while(i < len(replica.tasklist) and j < len(cluster.nodelist)):
-        if(cluster.nodelist[j].tid == -1):
-            cluster.nodelist[j].tid = replica.tasklist[i].tid
-            replica.tasklist[i].nid = cluster.nodelist[j].nid
+    cluster = clusterlist[partition.cid]
+    while(i < len(replica.tasklist) and j < len(partition.nodelist)):
+        if(partition.nodelist[j].tid == -1):
+            partition.nodelist[j].tid = replica.tasklist[i].tid
+            replica.tasklist[i].nid = partition.nodelist[j].nid
+            partition.avail -= 1
             cluster.avail -= 1
             i += 1
             j += 1
         else:
             j += 1
-    replica.cid = cluster.cid
-    print 'add replica %s (Job %s) to cluster %s' %(replica.rid, replica.jid, cluster.cid)
+    replica.pid = partition.pid
+    print 'add replica %s (Job %s) to partition %s' %(replica.rid, replica.jid, partition.pid)
     # logger += 'add replica %s (Job %s) to cluster %s\n' %(replica.rid, replica.jid, cluster.cid)
 
-def findAvailClusters(job, count):
-    avail_cid=[]
+def findAvailPartition(job, count):
+    avail_pid=[]
     spot = 0
     for r in range(count):
         spot += len(job.replicalist[r].tasklist)
-    for cluster in clusterlist.values():
-        if (cluster.avail >= spot):
-            avail_cid.append(cluster.cid)
-    if not avail_cid:
+    for partition in partlist.values():
+        if (partition.avail >= spot):
+            avail_pid.append(partition.pid)
+    if not avail_pid:
         return -1
     else:
-        return avail_cid
+        return avail_pid
 
 def failureHandler(env, failurelog):
     ffile = open(failurelog, "r")
@@ -295,16 +342,16 @@ def failureHandler(env, failurelog):
                     clusterlist[cid].action.interrupt('FS')
                 if(flagType=="FE"):
                     clusterlist[cid].action.interrupt('FE')
-            elif targetType == "Physical":
+            elif targetType == "Partition":
                 pid = parts[4]
                 if(flagType=="FS"):
-                    for c in clusterlist.values():
-                        if(c.pid == pid):
-                            c.action.interrupt('FS')
+                    for p in partlist.values():
+                        if(p.pid == pid):
+                            p.action.interrupt('FS')
                 if(flagType=="FE"):
-                    for c in clusterlist.values():
-                        if(c.pid == pid):
-                            c.action.interrupt('FE')
+                    for p in partlist.values():
+                        if(p.pid == pid):
+                            p.action.interrupt('FE')
             elif targetType == "MultiNodeOutage":
                 nodes = parts[4].split(",")
                 for nid in nodes:
@@ -332,20 +379,34 @@ def createResource(env, joblog, clusterlog):
             continue
         parts = line.split(";")
         cid = parts[0]
-        pid = parts[1]
-        if(int(pid) > max_pid):
-            max_pid = int(pid)
-        zid = parts[2]
+        zid = parts[1]
         if(int(zid) > max_zid):
             max_zid = int(zid)
+        pids = parts[2].split(",")
+        s_pid = int(pids[0])
+        e_pid = int(pids[1])
+        pid_count = e_pid - s_pid + 1
         nodes = parts[3].split(",")
-        for nid in nodes:
-            nid = nid.strip()
-            aNode = Node(env, nid, cid, -1)
-            nodelist[nid] = aNode
-            temp1.append(aNode)
-        clusterlist[cid] = Cluster(env, cid, pid, zid, temp1, len(nodes))
-        del temp1[:]
+        s_nid = int(nodes[0])
+        e_nid = int(nodes[1])
+        nodes_per_part = (e_nid - s_nid + 1)/pid_count
+
+        for i in range(pid_count):
+            pid = str(s_pid+i)
+            if(int(pid) > max_pid):
+                max_pid = int(pid)
+            for j in range(nodes_per_part):
+                nid = str(s_nid+j)
+                aNode = Node(env, nid, cid, pid, -1)
+                nodelist[nid]= aNode
+                temp1.append(aNode)
+            aPartition = Partition(env, pid, cid, temp1, len(temp1))
+            partlist[pid] = aPartition
+            del temp1[:]
+            temp2.append(aPartition)
+            s_nid = s_nid + nodes_per_part
+        clusterlist[cid] = Cluster(env, cid, zid, temp2, len(temp2))
+        del temp2[:]
     cfile.close()
 
     # jobs:
@@ -381,21 +442,17 @@ def createResource(env, joblog, clusterlog):
         del temp2[:]
     jfile.close()
 
-def isAvalable(tasknum, cluster):
-    if(cluster.avail >= tasknum):
+def isAvalable(tasknum, partition):
+    if(partition.avail >= tasknum):
         return True
     else:
         return False
 
-def findInCandidates(pid, zid, job, s, l):
+def findCluster(zid, tasknum):
     candidates = []
     for cluster in clusterlist.values():
-        if(int(cluster.pid) == pid and int(cluster.zid) == zid):
+        if(int(cluster.zid) == zid):
             candidates.append(cluster)
-    tasknum=0
-    l = len(job.replicalist)-len(job.replicalist)/2
-    for r in range(s, l):
-        tasknum += len(job.replicalist[r].tasklist)
     index=0
     found=True
     while(isAvalable(tasknum,candidates[index])==False):
@@ -645,25 +702,61 @@ def findPlacement3(job):
             job.running = True
             tryagian = False
 
+def findPlacement(job, diff_l, diff_p):
+    count = 0
+    length = len(job.replicalist)
+    assigned = 0
+    while(assigned < length and count <= 20):
+        count +=1
+        zid_range = range(max_zid+1)    
+        start_index = 0
+        zids = random.sample(zid_range, diff_l)
+        pids = []
+        for zid in zids:
+            #add candidate partitions
+            candidates = []
+            for cluster in clusterlist.values():
+                if(int(cluster.zid) == zid):
+                    for domain in cluster.domainlist:
+                        candidates.append(domain.pid)
+            oneChoice = random.choice(candidates)
+            pids.append(oneChoice)
+            candidates.remove(oneChoice)
+        add = random.sample(candidates, diff_p-diff_l)
+        pids.extend(add)
+        assigned = 0
+        index=0
+        for pid in pids:
+            tasknum = len(job.replicalist[index].tasklist)
+            if(partlist[pid].avail >= tasknum):
+                assignReplica(partlist[pid], job.replicalist[index])
+                assigned += 1
+                index += 1
+            else:
+                break
+        if(assigned==diff_p):
+            remain = length - diff_p
+            for i in range(remain):
+                for pid in pids:
+                    tasknum = len(job.replicalist[diff_p+i].tasklist)
+                    if(partlist[pid].avail >= tasknum):
+                        assignReplica(partlist[pid], job.replicalist[index])
+                        assigned += 1
+                        break   
+    if(assigned < length):
+        print "add Job %s fail" % job.jid
+             
+
 def placeJobOnCluster(strategy):
     for job in joblist.values():
         if(job.requirement == "NAN"):
             strategies = strategy.split("-")
         else:
             strategies = job.requirement.split("-")
-        diff_p = int(strategies[0])
-        diff_l = int(strategies[1])
+        diff_l = int(strategies[0])
+        diff_p = int(strategies[1])
 
-        if(diff_p==1):
-            findPlacement1(job, diff_l, "zid")
-        elif(diff_l==1):
-            findPlacement1(job, diff_p, "pid")
-        elif(diff_p==2):
-            findPlacement2(job, diff_l, "zid")
-        elif(diff_l==2):
-            findPlacement2(job, diff_p, "pid")
-        else: #3-3
-            findPlacement3(job)
+        findPlacement(job, diff_l, diff_p)
 
 if __name__ == "__main__":
     p = OptionParser()

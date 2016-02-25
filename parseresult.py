@@ -62,6 +62,7 @@ def parseLogfile(testname, joblogfile, conf, outfile):
 
     # print thresholds
     outputline = ""
+    downtimes={}
     for p in range(1, 4):
         for z in range(1, 4):
             singleresult = {}
@@ -91,12 +92,12 @@ def parseLogfile(testname, joblogfile, conf, outfile):
                         singleresult[jid]["activetasks"].append(numoftasks[jid])
                         singleresult[jid]["time"].append(time)
                         active[jid] = numoftasks[jid]
-                        # singleresult[jid]["downtime"]={}
-                        # downtimes[jid]={}
-                        # for grade in range(9,-1,-1):
-                        #     downtimes[jid][grade]={}
-                        #     downtimes[jid][grade]["start"]=[]
-                        #     downtimes[jid][grade]["stop"]=[]
+                        singleresult[jid]["downtime"]={}
+                        downtimes[jid]={}
+                        for grade in range(9,-1,-1):
+                            downtimes[jid][grade]={}
+                            downtimes[jid][grade]["start"]=[]
+                            downtimes[jid][grade]["stop"]=[]
                 if(token[0]=="Task"):
                     taskid = token[1]
                     jid = taskid.split("_")[0]
@@ -104,16 +105,16 @@ def parseLogfile(testname, joblogfile, conf, outfile):
                         active[jid] -= 1
                         singleresult[jid]["time"].append(time)
                         singleresult[jid]["activetasks"].append(active[jid])
-                        # downgrade = testDowngrade(singleresult[jid], thresholds[jid])
-                        # if(downgrade != -1):
-                            # downtimes[jid][downgrade]["start"].append(time)
+                        downgrade = testDowngrade(singleresult[jid], thresholds[jid])
+                        if(downgrade != -1):
+                            downtimes[jid][downgrade]["start"].append(time)
                     if(action=="RESTART"):
                         active[jid] += 1
                         singleresult[jid]["time"].append(time)
                         singleresult[jid]["activetasks"].append(active[jid])
-                        # upgrade = testUpgrade(singleresult[jid], thresholds[jid])
-                        # if(upgrade != -1):
-                            # downtimes[jid][upgrade]["stop"].append(time)   
+                        upgrade = testUpgrade(singleresult[jid], thresholds[jid])
+                        if(upgrade != -1):
+                            downtimes[jid][upgrade]["stop"].append(time)   
             # print singleresult[jid]["activetasks"]
             #prepare data
             for jid in singleresult.keys():
@@ -160,51 +161,53 @@ def parseLogfile(testname, joblogfile, conf, outfile):
                 #                 taskline.append(singleresult[jid]["activetasks"][j-1])
                 #                 break
                 
-                figname = outfile+"_"+jid+"_"+strategy+".svg"
-                fig, ax = plt.subplots()
-                plt.plot(timeline, taskline)
-                # plt.plot(timeline, maxline)
-                # plt.plot(singleresult[jid]["time"], singleresult[jid]["activetasks"], linewidth=0.5)
-                plt.axhline(y=numoftasks[jid], color='r')
-                # ax.fill_between(timeline, taskline, numoftasks[jid], facecolor='blue')
-                ymax = (numoftasks[jid]/10+1)*10
-                plt.ylim(0, ymax)
-                plt.yticks(np.arange(0, ymax, 10))
-                plt.xlim(0, X_MAX/3600.0)
-                # plt.xticks(np.arange(0, sim_time, sim_time/24/60/60/30))
-                plt.xlabel('time (hr)')
-                plt.ylabel('tasks')
-                plt.title("Job_"+jid+" with "+strategy+" strategy ( "+percentage+" )")
-                plt.legend(['active tasks', 'total tasks'], loc='lower right')
-                # plt.text(0.95,0.95, percentage,fontsize=12)
-                fig.savefig(figname, ext="svg")
-                plt.close()
-            # for jid in downtimes.keys():
-            #     for grade in downtimes[jid].keys():
-            #         if not downtimes[jid][grade]["start"]:
-            #             print "no result"
-            #         else:
-            #             arr1 = np.array(downtimes[jid][grade]["start"])
-            #             arr2 = np.array(downtimes[jid][grade]["stop"])
-            #             # stop_time = arr2 - arr1
-            #             if(len(arr2)!=len(arr1)):
-            #                 print "not equal: jid=%s grade=%s" %(jid, grade)
-            #             else:
-            #                 stop_time = arr2 - arr1
-            #             total=0
-            #             for i in range(len(stop_time)):
-            #                 total += stop_time[i]
-            #             singleresult[jid]["downtime"][grade]=total
+                # figname = outfile+"_"+jid+"_"+strategy+".svg"
+                # fig, ax = plt.subplots()
+                # plt.plot(timeline, taskline)
+                # # plt.plot(timeline, maxline)
+                # # plt.plot(singleresult[jid]["time"], singleresult[jid]["activetasks"], linewidth=0.5)
+                # plt.axhline(y=numoftasks[jid], color='r')
+                # # ax.fill_between(timeline, taskline, numoftasks[jid], facecolor='blue')
+                # ymax = (numoftasks[jid]/10+1)*10
+                # plt.ylim(0, ymax)
+                # plt.yticks(np.arange(0, ymax, 10))
+                # plt.xlim(0, X_MAX/3600.0)
+                # # plt.xticks(np.arange(0, sim_time, sim_time/24/60/60/30))
+                # plt.xlabel('time (hr)')
+                # plt.ylabel('tasks')
+                # plt.title("Job_"+jid+" with "+strategy+" strategy ( "+percentage+" )")
+                # plt.legend(['active tasks', 'total tasks'], loc='lower right')
+                # # plt.text(0.95,0.95, percentage,fontsize=12)
+                # fig.savefig(figname, ext="svg")
+                # plt.close()
 
-            # sorted_jids = singleresult.keys()
-            # sorted_jids = sorted(sorted_jids)
-            # for jid in sorted_jids:
-            #     outputline += "%s,%s,"%(strategy, jid)
-            #     sorted_keys = singleresult[jid]["downtime"].keys()
-            #     sorted_keys = sorted(sorted_keys, reverse=True)
-            #     for grade in sorted_keys:
-            #         outputline += "%s," % singleresult[jid]["downtime"][grade]
-            #     outputline += "\n"
+
+            for jid in downtimes.keys():
+                for grade in downtimes[jid].keys():
+                    if not downtimes[jid][grade]["start"]:
+                        print "no result"
+                    else:
+                        arr1 = np.array(downtimes[jid][grade]["start"])
+                        arr2 = np.array(downtimes[jid][grade]["stop"])
+                        # stop_time = arr2 - arr1
+                        if(len(arr2)!=len(arr1)):
+                            print "not equal: jid=%s grade=%s" %(jid, grade)
+                        else:
+                            stop_time = arr2 - arr1
+                        total=0
+                        for i in range(len(stop_time)):
+                            total += stop_time[i]
+                        singleresult[jid]["downtime"][grade]=float(total/sim_time)
+
+            sorted_jids = singleresult.keys()
+            sorted_jids = sorted(sorted_jids)
+            for jid in sorted_jids:
+                outputline += "%s,%s,"%(strategy, jid)
+                sorted_keys = singleresult[jid]["downtime"].keys()
+                sorted_keys = sorted(sorted_keys, reverse=True)
+                for grade in sorted_keys:
+                    outputline += "%s," % singleresult[jid]["downtime"][grade]
+                outputline += "\n"
             wlf.close()
     out.write(outputline)
     out.close()
