@@ -706,7 +706,8 @@ def findPlacement(job, diff_l, diff_p):
     count = 0
     length = len(job.replicalist)
     assigned = 0
-    while(assigned < length and count <= 20):
+    tryagian = True
+    while(assigned < length and count <= 100):
         count +=1
         zid_range = range(max_zid+1)    
         start_index = 0
@@ -724,6 +725,8 @@ def findPlacement(job, diff_l, diff_p):
             candidates.remove(oneChoice)
         add = random.sample(candidates, diff_p-diff_l)
         pids.extend(add)
+        # print "try %d: zids %s; pids %s" %(count, zids, pids)
+
         assigned = 0
         index=0
         for pid in pids:
@@ -738,6 +741,7 @@ def findPlacement(job, diff_l, diff_p):
         if(assigned==diff_p):
             remain = length - diff_p
             for i in range(remain):
+                pids = random.sample(pids,len(pids))
                 for pid in pids:
                     tasknum = len(job.replicalist[index+i].tasklist)
                     if(partlist[pid].avail >= tasknum):

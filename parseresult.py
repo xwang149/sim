@@ -2,7 +2,7 @@
 import random
 import math
 from optparse import OptionParser
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 
 X_MAX = 7200000
@@ -35,6 +35,7 @@ def parseLogfile(testname, joblogfile, conf, outfile):
         parts = line.split(";")
         time = int(parts[0])
         jid = parts[1]
+        numreplica = len(parts[2].split(","))
         if not thresholds.has_key(jid):
             thresholds[jid]=[]
         numTasks = parts[3].split(",")
@@ -45,6 +46,8 @@ def parseLogfile(testname, joblogfile, conf, outfile):
         for i in range(9,-1,-1):
             thresholds[jid].append(int(round(totalTasks*i/10.0)))
     joblog.close()
+
+    max_diversity = numreplica
 
     #find max sim time
     config = open(conf, "r")
@@ -62,8 +65,8 @@ def parseLogfile(testname, joblogfile, conf, outfile):
 
     # print thresholds
     outputline = ""
-    for p in range(1, 4):
-        for z in range(p, 4):
+    for p in range(1, max_diversity+1):
+        for z in range(p, max_diversity+1):
             singleresult = {}
             active = {}
             print "read %s_%s-%s" %(testname, p, z)
