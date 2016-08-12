@@ -182,8 +182,10 @@ class Partition(object):
         self.env = env
         self.pid = pid
         self.cid = cid
+        self.cap = capacity
         self.avail = capacity
         self.nodelist = list(nodelist)
+        self.downtime = 0
         self.down = False
         self.maintain = False
         self.action = env.process(self.working())
@@ -196,6 +198,7 @@ class Partition(object):
             except simpy.Interrupt as i:
                 if (i.cause == 'FS' and self.maintain==False and self.down==False):
                     self.down = True
+                    fstart = env.now
                     # print("%s,Domain %s,STOP" % (env.now, self.pid))
                     # logger += "%s,Cluster %s,STOP\n" % (env.now, self.cid)
                     for node in self.nodelist:
@@ -204,11 +207,13 @@ class Partition(object):
                     for node in self.nodelist:
                         node.action.interrupt('FE')
                     self.down = False
+                    self.downtime += env.now - fstart
                     # print("%s,Domain %s,RESTART" % (env.now, self.pid))
                     # logger +=  "%s,Cluster %s,RESTART\n" % (env.now, self.cid)
                 if (i.cause == 'MTS' and self.maintain==False):
                     self.down = True
                     self.maintain = True
+                    fstart = env.now
                     # print("%s,Domain %s,MTSTART" % (env.now, self.pid))
                     # logger += "%s,Cluster %s,MTSTART\n" % (env.now, self.pid)
                     for node in self.nodelist:
@@ -218,6 +223,7 @@ class Partition(object):
                         node.action.interrupt('MTE')
                     self.down = False
                     self.maintain = False
+                    self.downtime += env.now - fstart
                     # print("%s,Domain %s,MTEND" % (env.now, self.pid))   
                     # logger += "%s,Cluster %s,MTEND\n" % (env.now, self.cid)    
 
@@ -227,6 +233,7 @@ class Cluster(object):
         self.env = env
         self.cid = cid
         self.zid = zid
+        self.cap = capacity
         self.avail = capacity
         self.domainlist = list(domainlist)
         self.down = False
@@ -277,21 +284,30 @@ class Cluster(object):
 def assignReplica(partition, replica):
     global logger
     i=0
-    j=0
     cluster = clusterlist[partition.cid]
-    while(i < len(replica.tasklist) and j < len(partition.nodelist)):
-        if(partition.nodelist[j].tid == -1):
-            partition.nodelist[j].tid = replica.tasklist[i].tid
-            replica.tasklist[i].nid = partition.nodelist[j].nid
-            partition.avail -= 1
-            cluster.avail -= 1
-            i += 1
-            j += 1
-        else:
-            j += 1
+    start_index = partition.cap - partition.avail
+    tasknum = len(replica.tasklist)
+    for i in range(tasknum):
+        partition.nodelist[start_index+i].tid = replica.tasklist[i].tid
+        replica.tasklist[i].nid = partition.nodelist[start_index+i].nid
+        partition.avail -= 1
+        cluster.avail -= 1
     replica.pid = partition.pid
-    print 'add replica %s (Job %s) to partition %s (Cluster %s)' %(replica.rid, replica.jid, partition.pid, partition.cid)
+    print 'add replica %s (Job %s) to partition %s (Cluster %s, zone %s)' %(replica.rid, replica.jid, partition.pid, partition.cid, cluster.zid)
+    # print "occupied partition %s (from %d for %d)" % (partition.pid, start_index, tasknum)
     # logger += 'add replica %s (Job %s) to cluster %s\n' %(replica.rid, replica.jid, cluster.cid)
+    return start_index, tasknum
+
+def cleanupAssignment(partition, start_index, tasknum):
+    i=0
+    cluster = clusterlist[partition.cid]
+    for i in range(tasknum):
+        partition.nodelist[start_index+i].tid = -1
+        partition.avail += 1
+        cluster.avail += 1
+        # print "node %s has task: %d" %(partition.nodelist[start_index+i].nid, partition.nodelist[start_index+i].tid)
+    # print 'clean partition %s (from %d for %d)' %(partition.pid, start_index, tasknum)
+
 
 def findAvailPartition(job, count):
     avail_pid=[]
@@ -706,13 +722,13 @@ def findPlacement(job, diff_l, diff_p):
     count = 0
     length = len(job.replicalist)
     assigned = 0
-    tryagian = True
     while(assigned < length and count <= 100):
         count +=1
         zid_range = range(max_zid+1)    
-        start_index = 0
         zids = random.sample(zid_range, diff_l)
         pids = []
+        cleanup=[]
+        balancedSize = diff_p / diff_l
         for zid in zids:
             #add candidate partitions
             candidates = []
@@ -720,34 +736,51 @@ def findPlacement(job, diff_l, diff_p):
                 if(int(cluster.zid) == zid):
                     for domain in cluster.domainlist:
                         candidates.append(domain.pid)
-            oneChoice = random.choice(candidates)
-            pids.append(oneChoice)
-            candidates.remove(oneChoice)
-        add = random.sample(candidates, diff_p-diff_l)
-        pids.extend(add)
+            balancedChoice = random.sample(candidates, balancedSize)
+            pids.extend(balancedChoice)
+            for choice in balancedChoice:
+                candidates.remove(choice)
+        if(diff_p-diff_l*balancedSize>0):
+            add = random.sample(candidates, diff_p-diff_l*balancedSize)
+            pids.extend(add)
         # print "try %d: zids %s; pids %s" %(count, zids, pids)
-
+        # print "job %s: replica length=%d, replicas:%s"%(job.jid, length, job.replicalist)
         assigned = 0
         index=0
+        perpid = length / len(pids)
         for pid in pids:
-            tasknum = len(job.replicalist[index].tasklist)
+            tasknum = 0
+            for i in range(perpid):
+                # print "loop index: pid=%s, i=%d" % (pid ,i )
+                tasknum += len(job.replicalist[index+i].tasklist)
+            # print "assign Replica %s to partition %s (avail %d)" % (job.replicalist[index].rid, pid, partlist[pid].avail)
+            # print "tasknum: %d" % tasknum
             if(partlist[pid].avail >= tasknum):
-                assignReplica(partlist[pid], job.replicalist[index])
-                assigned += 1
-                index += 1
-
+                for i in range(perpid):
+                    s_index, numoftask = assignReplica(partlist[pid], job.replicalist[index])
+                    assigned += 1
+                    index += 1
+                    cleanup.append([partlist[pid],s_index, numoftask])
             else:
                 break
-        if(assigned==diff_p):
-            remain = length - diff_p
+        if(assigned==diff_p*perpid):
+            remain = length - diff_p*perpid
+            # print "remaining %d"%remain
             for i in range(remain):
                 pids = random.sample(pids,len(pids))
                 for pid in pids:
                     tasknum = len(job.replicalist[index+i].tasklist)
                     if(partlist[pid].avail >= tasknum):
-                        assignReplica(partlist[pid], job.replicalist[index+i])
+                        s_index, numoftask = assignReplica(partlist[pid], job.replicalist[index+i])
                         assigned += 1
-                        break   
+                        cleanup.append([partlist[pid],s_index, numoftask])
+                        pids.remove(pid)
+                        break
+        if(assigned<length):
+            for i in range(len(cleanup)):
+                # print "cleanup P%s: before avail=%d" % (cleanup[i][0].pid, cleanup[i][0].avail)
+                cleanupAssignment(cleanup[i][0],cleanup[i][1],cleanup[i][2])
+                # print "after avail=%d" % (cleanup[i][0].avail)
     if(assigned < length):
         print "add Job %s fail" % job.jid
     else:
@@ -813,9 +846,20 @@ if __name__ == "__main__":
     createResource(env, opts.joblog, opts.clusterlog)
     placeJobOnCluster(opts.strategy)
     env.process(failureHandler(env, opts.failurelog))
+    # occupied = 0
+    # for pid in partlist:
+    #     for node in partlist[pid].nodelist:
+    #         if(node.tid!=-1):
+    #             occupied += 1
+    # print "running tasks=%d" % occupied
 
     # Execute!
     env.run(until=SIM_TIME)
+
+    total_down = 0
+    for pid in partlist:
+        total_down += partlist[pid].downtime
+    print "Total machine downtime=%d" % total_down
 
     # outfile = open(OUTPUT, "w")
     # outfile.write(logger)

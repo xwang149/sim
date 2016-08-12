@@ -60,8 +60,12 @@ def parseLogfile(testname, joblogfile, conf, outfile):
         parts = line.split("=")
         if(parts[0]=="SIM_TIME_IN_DAYS"):
             sim_time = int(parts[1]) * 24 * 60 * 60
-            break
-    config.close()    
+        if(parts[0]=="NUM_PART"):
+            partitions = int(parts[1])
+        if(parts[0]=="NUM_CLUSTER"):
+            clusters = int(parts[1])
+    config.close()
+    numofpartitions = partitions * clusters
 
     # print thresholds
     outputline = ""
@@ -79,6 +83,9 @@ def parseLogfile(testname, joblogfile, conf, outfile):
                 if len(line)==0:
                     continue
                 if "add" in line:
+                    continue
+                if "downtime" in line:
+                    machine_down = line.split("=")[1]
                     continue
                 parts = line.split(",")
                 time = int(parts[0])
@@ -204,6 +211,7 @@ def parseLogfile(testname, joblogfile, conf, outfile):
                         singleresult[jid]["downtime"][grade]=total
                         # print "J%s,Grade %d; total=%d" %(jid, grade, total)
 
+            percetage_down = float(machine_down) / numofpartitions / sim_time
             sorted_jids = singleresult.keys()
             sorted_jids = sorted(sorted_jids)
             for jid in sorted_jids:
@@ -212,7 +220,7 @@ def parseLogfile(testname, joblogfile, conf, outfile):
                 sorted_keys = sorted(sorted_keys, reverse=True)
                 for grade in sorted_keys:
                     outputline += "%s," % singleresult[jid]["downtime"][grade]
-                outputline += "\n"
+                outputline += "%s\n" % percetage_down
             wlf.close()
     out.write(outputline)
     out.close()
